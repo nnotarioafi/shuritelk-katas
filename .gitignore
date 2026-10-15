@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+
+# Supabase CLI
+supabase/.temp
+supabase/.branches
