@@ -24,7 +24,7 @@ export default function Katas({ session }) {
         // RLS ya filtra: solo llegan los katas del cinturón del alumno y los inferiores.
         supabase
           .from('katas')
-          .select('id, titulo, nivel_minimo, orden')
+          .select('id, titulo, nivel_minimo, orden, estado')
           .order('nivel_minimo', { ascending: false })
           .order('orden', { ascending: true }),
       ])
@@ -96,7 +96,11 @@ export default function Katas({ session }) {
             {items.map((k) => (
               <Link key={k.id} to={`/kata/${k.id}`} className="card kata-card">
                 <span className="thumb"><PlayIcon /></span>
-                <span className="kata-title">{k.titulo}</span>
+                <span className="kata-text">
+                  <span className="kata-title">{k.titulo}</span>
+                  {k.estado === 'procesando' && <span className="tag tag-wait">Procesando · solo lo ves tú</span>}
+                  {k.estado === 'error' && <span className="tag tag-error">Error en el vídeo</span>}
+                </span>
               </Link>
             ))}
           </section>

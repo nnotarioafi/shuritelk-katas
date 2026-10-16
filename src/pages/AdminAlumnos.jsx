@@ -2,13 +2,30 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabase.js'
 import { callFunction } from '../api.js'
 import { BELTS } from '../belts.js'
+import ImportStudents from './ImportStudents.jsx'
+
+// Descarga un texto como archivo CSV (con BOM para que Excel respete los acentos).
+function downloadCsv(csv) {
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'alumnos.csv'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
 
 export default function AdminAlumnos() {
   const [alumnos, setAlumnos] = useState([])
   const [state, setState] = useState('loading') // 'loading' | 'ok' | 'error'
   const [query, setQuery] = useState('')
   const [rowError, setRowError] = useState('')
-  const [showForm, setShowForm] = useState(false)
+  const [panel, setPanel] = useState(null) // null | 'alta' | 'importar'
+  const [exporting, setExporting] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
 
   async function load() {
     const { data, error } = await supabase
@@ -38,6 +55,41 @@ export default function AdminAlumnos() {
     return alumnos.filter((a) => `${a.nombre ?? ''} ${a.email ?? ''}`.toLowerCase().includes(q))
   }, [alumnos, query])
 
+  const toggle = (name) => setPanel((p) => (p === name ? null : name))
+
+  async function removeStudent(alumno) {
+    const who = alumno.nombre || alumno.email
+    const ok = window.confirm(
+      `¿Borrar a ${who}?\n\nSe elimina su cuenta y su cinturón, y no se puede deshacer.`,
+    )
+    if (!ok) return
+    setRowError('')
+    setNotice('')
+    setDeletingId(alumno.id)
+    try {
+      await callFunction('delete-student', { user_id: alumno.id })
+      setAlumnos((list) => list.filter((a) => a.id !== alumno.id))
+      setNotice(`${who} ha sido borrado.`)
+    } catch (err) {
+      setRowError(err.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function exportCsv() {
+    setRowError('')
+    setExporting(true)
+    try {
+      const { csv } = await callFunction('export-students', {})
+      downloadCsv(csv)
+    } catch (err) {
+      setRowError(err.message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
       <div className="toolbar">
@@ -48,17 +100,26 @@ export default function AdminAlumnos() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button className="btn btn-small btn-primary" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? 'Cerrar' : '+ Alta'}
+        <button className="btn btn-small btn-primary" onClick={() => toggle('alta')}>
+          {panel === 'alta' ? 'Cerrar' : '+ Alta'}
         </button>
       </div>
 
-      {showForm && (
-        <NewStudent
-          onCreated={() => { setShowForm(false); load() }}
-        />
+      <div className="btn-row">
+        <button className="btn btn-small btn-secondary" onClick={() => toggle('importar')}>
+          {panel === 'importar' ? 'Cerrar importación' : 'Importar desde Excel'}
+        </button>
+        <button className="btn btn-small btn-secondary" onClick={exportCsv} disabled={exporting || alumnos.length === 0}>
+          {exporting ? 'Preparando…' : 'Descargar CSV'}
+        </button>
+      </div>
+
+      {panel === 'alta' && <NewStudent onCreated={() => { setPanel(null); load() }} />}
+      {panel === 'importar' && (
+        <ImportStudents existing={alumnos} onDone={load} onClose={() => setPanel(null)} />
       )}
 
+      {notice && <p role="status" className="notice">{notice}</p>}
       {rowError && <p role="alert" className="error">{rowError}</p>}
       {state === 'loading' && <p className="muted" aria-busy="true">Cargando alumnos…</p>}
       {state === 'error' && <p role="alert" className="error">No se pudieron cargar los alumnos.</p>}
@@ -76,11 +137,32 @@ export default function AdminAlumnos() {
               aria-label={`Cinturón de ${a.nombre ?? a.email}`}
               value={a.nivel}
               onChange={(e) => changeBelt(a, Number(e.target.value))}
+              disabled={deletingId === a.id}
             >
               {BELTS.map((b) => (
                 <option key={b.nivel} value={b.nivel}>{b.nombre}</option>
               ))}
             </select>
+            {!a.es_admin && (
+              <button
+                className="icon-btn icon-btn-danger"
+                aria-label={`Borrar a ${a.nombre || a.email}`}
+                title="Borrar alumno"
+                onClick={() => removeStudent(a)}
+                disabled={deletingId === a.id}
+              >
+                {deletingId === a.id ? (
+                  <span aria-hidden="true">…</span>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                )}
+              </button>
+            )}
           </div>
         ))}
       </div>

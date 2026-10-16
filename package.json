@@ -16,8 +16,8 @@
     "tus-js-client": "^4.2.3"
   },
   "devDependencies": {
-    "vite": "^6.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite-plugin-pwa": "^0.21.1"
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.8",
+    "vite-plugin-pwa": "^0.20.5"
   }
 }

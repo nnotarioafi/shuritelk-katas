@@ -10,6 +10,9 @@ supabase/useful-queries.sql            consultas de administración para copiar 
 supabase/functions/video-url/          firma las URLs de vídeo para los alumnos
 supabase/functions/upload-credentials/ prepara la subida directa de un vídeo a Bunny (solo admin)
 supabase/functions/delete-kata/        borra un kata y su vídeo en Bunny (solo admin)
+supabase/functions/video-status/       comprueba en Bunny si un vídeo ya está listo (solo admin)
+supabase/functions/export-students/    genera el CSV de alumnos con su último acceso (solo admin)
+supabase/functions/delete-student/     borra a un alumno (solo admin)
 supabase/functions/create-student/     da de alta a un alumno (solo admin)
 supabase/functions/_shared/admin.ts    comprobación de admin y utilidades comunes
 src/                                   la PWA (login, katas, reproductor y administración)
@@ -25,14 +28,15 @@ src/                                   la PWA (login, katas, reproductor y admin
      que hacen falta de forma explícita.
    - **Automatic RLS** (si aparece): puedes activarla; la migración ya activa RLS en sus tablas.
 2. Crea las tablas y las políticas. Dos formas, elige una:
-   - **A mano:** **SQL Editor** → pega el contenido de `supabase/migrations/20261015000000_initial_schema.sql` → Run.
+   - **A mano:** **SQL Editor** → pega y ejecuta, en este orden, los archivos de `supabase/migrations/`
+     (`20261015000000_initial_schema.sql` y después `20261016000000_kata_estado.sql`).
    - **Con la CLI** (la que usa también el despliegue automático): `npx supabase@latest link --project-ref TU-REF`
      y después `npx supabase@latest db push`.
    El archivo se puede aplicar más de una vez sin romper nada.
 3. **Authentication → Sign In / Providers → Email**: desactiva **Allow new users to sign up**
    (así solo entran los alumnos que tú des de alta).
 4. **Authentication → Emails → Templates**: en las plantillas **Magic link** y **Confirm signup**
-   incluye `{{ .Token }}` para que el correo muestre el código de 6 dígitos, por ejemplo:
+   incluye `{{ .Token }}` para que el correo muestre el código numérico, por ejemplo:
 
    ```html
    <h2>Tu código para entrar</h2>
@@ -79,12 +83,16 @@ supabase secrets set \
 supabase functions deploy video-url
 supabase functions deploy upload-credentials
 supabase functions deploy delete-kata
+supabase functions deploy video-status
+supabase functions deploy export-students
+supabase functions deploy delete-student
 supabase functions deploy create-student
 ```
 
 - `video-url`: comprueba con el JWT del alumno que puede ver ese kata (mismas políticas RLS)
   y devuelve la URL del reproductor firmada, que caduca a las 2 horas.
-- `upload-credentials`, `delete-kata` y `create-student`: solo responden a administradores
+- `upload-credentials`, `delete-kata`, `video-status`, `create-student`, `export-students` y `delete-student`:
+  solo responden a administradores
   (`es_admin = true`). Las claves de Bunny y la `service_role` viven únicamente en el servidor.
 - Los secretos de Bunny solo existen en Supabase; nunca van en el `.env` de la app.
 
@@ -133,11 +141,35 @@ npm run build            # genera la carpeta dist/
 ### Pantalla de Administración
 Si tu perfil tiene `es_admin = true`, en la lista de katas aparece **Administrar alumnos y katas**.
 - **Alumnos:** buscar, cambiar el cinturón (se guarda al momento) y **+ Alta** para crear un alumno nuevo.
+  - **Importar desde Excel:** pega las filas desde Excel (columnas correo, nombre, cinturón) o sube un CSV.
+    La app enseña una vista previa (nuevos, a actualizar, sin cambios, errores) y no hace nada hasta que pulses
+    **Aplicar**. Si el correo ya existe se actualiza su cinturón; si no, se crea el alumno. Máximo 1000 filas por vez.
+    El cinturón puede ser el nombre (Naranja) o el número (3). Con el cinturón vacío, un alumno nuevo entra como blanco
+    y uno existente no cambia.
+  - **Descargar CSV:** baja la lista de alumnos (sin los administradores) con las columnas `email;nombre;cinturon;ultimo_acceso;baja`.
+    El separador es `;` y los acentos salen bien en Excel. `ultimo_acceso` está en hora UTC y, si está vacío, el
+    alumno nunca ha entrado (útil para avisar a las familias). Lo genera una función de servidor porque el último
+    acceso solo se puede leer allí.
+  - **Borrar un alumno:** icono de papelera junto a su cinturón. Pide confirmación y no se puede deshacer.
+    No aparece en los administradores (y el servidor tampoco lo permitiría).
+  - **Borrar alumnos desde el CSV:** en el archivo descargado escribe `baja` en la columna «baja» de los alumnos
+    que quieras eliminar, guarda como CSV e impórtalo. La vista previa los marca en rojo («BORRAR alumno») y,
+    antes de borrar, la app pide confirmación y que escribas BORRAR. Borrar elimina su cuenta y su cinturón y
+    **no se puede deshacer**. No se puede borrar a administradores ni a uno mismo. Los vídeos no se tocan.
+    Solo funciona con la cabecera del archivo; pegando filas sin cabecera no existe la columna «baja».
 - **Katas:** **+ Nuevo kata** (título, descripción, cinturón mínimo, orden y vídeo). El vídeo se sube
   directamente a Bunny con barra de progreso; la pantalla debe seguir encendida hasta que termine.
-  Después Bunny tarda unos minutos en procesarlo. También puedes editar y borrar katas
+  Después Bunny tarda unos minutos en procesarlo: el kata aparece como **«Procesando»**, los alumnos **no lo ven**
+  hasta que el vídeo está listo, y la pantalla lo comprueba sola cada 15 segundos (mientras la tengas abierta). También puedes editar y borrar katas
   (al borrar se elimina el vídeo en Bunny para no pagar almacenamiento de vídeos huérfanos).
 - Para cambiar el vídeo de un kata: bórralo y créalo de nuevo.
+
+### Despliegue en Cloudflare
+El archivo `wrangler.jsonc` ya está incluido: indica que se publique la carpeta `dist` como sitio estático.
+Sin él, Cloudflare intenta autoconfigurar el proyecto y falla con Vite 5.
+- Build command: `npm run build` · Deploy command: `npx wrangler deploy`
+- Las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` deben estar en las variables de **build**
+  (Settings → Build → Variables), no solo en las del Worker, porque se incrustan al compilar.
 
 ### Despliegue (Cloudflare Pages, Netlify o Vercel)
 Cada `git push` a `main` actualiza la app (Cloudflare) y, si tocaste `supabase/`, también la base de datos y las funciones.
@@ -156,11 +188,15 @@ Cada `git push` a `main` actualiza la app (Cloudflare) y, si tocaste `supabase/`
 - [ ] Plantilla de correo con `{{ .Token }}`.
 - [ ] Alumno de prueba con cinturón bajo: comprueba que NO ve katas de cinturones superiores.
 - [ ] Pantalla completa del vídeo probada en iPhone y Android con la PWA instalada.
-- [ ] Subida de un vídeo de prueba desde el móvil (y comprobar que se reproduce tras procesarse).
+- [ ] Subida de un vídeo de prueba desde el móvil: debe salir «Procesando», pasar a listo solo y reproducirse.
+- [ ] Mientras un kata está «Procesando», un alumno de prueba NO debe verlo en su lista.
+- [ ] Importación de prueba con 2-3 filas: revisa la vista previa antes de aplicar.
+- [ ] Borrado de prueba: crea un alumno falso, márcalo con `baja` en el CSV y comprueba que desaparece
+      (y que un administrador marcado con `baja` NO se borra).
 - [ ] Un alumno normal NO ve el botón de Administración y, si prueba a abrir `/#/admin`, vuelve a la lista.
 - [ ] Plan Pro de Supabase si lo van a usar alumnos reales (el gratuito se pausa tras 7 días sin actividad).
 
 ## Pendiente para más adelante
-- Aviso de "procesando" mientras Bunny termina de convertir el vídeo.
 - Sustituir el vídeo de un kata sin borrarlo.
+- Avisar por webhook de Bunny en vez de preguntar cada 15 s (solo importa si hay muchos vídeos a la vez).
 - Acceso por WhatsApp en lugar de correo (Twilio).

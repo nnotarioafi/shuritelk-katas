@@ -37,7 +37,7 @@ export default function AdminKatas() {
   async function load() {
     const { data, error } = await supabase
       .from('katas')
-      .select('id, titulo, descripcion, nivel_minimo, orden')
+      .select('id, titulo, descripcion, nivel_minimo, orden, estado')
       .order('nivel_minimo', { ascending: false })
       .order('orden', { ascending: true })
     if (error) return setState('error')
@@ -45,6 +45,20 @@ export default function AdminKatas() {
     setState('ok')
   }
   useEffect(() => { load() }, [])
+
+  // Mientras haya vídeos procesándose, pregunta a Bunny cada 15 s (y una vez enseguida).
+  const pending = katas.some((k) => k.estado === 'procesando')
+  useEffect(() => {
+    if (!pending) return
+    let cancelled = false
+    async function check() {
+      try { await callFunction('video-status') } catch { /* se reintenta en el siguiente ciclo */ }
+      if (!cancelled) await load()
+    }
+    const first = setTimeout(check, 1500)
+    const timer = setInterval(check, 15000)
+    return () => { cancelled = true; clearTimeout(first); clearInterval(timer) }
+  }, [pending])
 
   async function remove(kata) {
     const ok = window.confirm(`¿Borrar «${kata.titulo}»? También se borra su vídeo y no se puede deshacer.`)
@@ -98,6 +112,12 @@ export default function AdminKatas() {
                   <span className="dot dot-small" style={{ background: belt.color, borderColor: belt.borde }} />
                   {belt.nombre}
                 </div>
+                {k.estado === 'procesando' && (
+                  <div className="tag tag-wait">Procesando vídeo… los alumnos aún no lo ven</div>
+                )}
+                {k.estado === 'error' && (
+                  <div className="tag tag-error">Error en el vídeo. Bórralo y súbelo de nuevo.</div>
+                )}
               </div>
               <div className="row-actions">
                 <button className="btn btn-small btn-secondary" onClick={() => { setNotice(''); setEditing(k) }} disabled={busyId === k.id}>
@@ -166,7 +186,7 @@ function KataForm({ kata, onCancel, onDone }) {
           `El vídeo se subió, pero no se pudo guardar el kata. Id del vídeo en Bunny: ${creds.videoId}`,
         )
       }
-      onDone('Kata creado. Bunny está procesando el vídeo: en unos minutos estará listo para los alumnos.')
+      onDone('Kata creado. Aparece como «Procesando» y los alumnos lo verán solos cuando Bunny termine.')
     } catch (err) {
       setError(err.message)
       setPhase('idle')

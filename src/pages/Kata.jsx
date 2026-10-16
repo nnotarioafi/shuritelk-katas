@@ -19,13 +19,14 @@ export default function Kata() {
       // 1) Datos del kata. Si el alumno no tiene cinturón suficiente, RLS no devuelve nada.
       const { data: k, error } = await supabase
         .from('katas')
-        .select('id, titulo, descripcion, nivel_minimo')
+        .select('id, titulo, descripcion, nivel_minimo, estado')
         .eq('id', id)
         .maybeSingle()
       if (cancelled) return
       if (error) return setState('error')
       if (!k) return setState('denied')
       setKata(k)
+      if (k.estado !== 'listo') return setState('notready') // solo lo ven los admins
 
       // 2) Siguiente kata (de menor a mayor cinturón) entre los que puede ver.
       const { data: lista } = await supabase
@@ -75,6 +76,10 @@ export default function Kata() {
         ) : (
           <div className="player-placeholder" aria-busy={state === 'loading'}>
             {state === 'loading' && 'Cargando vídeo…'}
+            {state === 'notready' &&
+              (kata?.estado === 'error'
+                ? 'Hay un error en este vídeo. Bórralo y súbelo de nuevo.'
+                : 'El vídeo se está procesando. Solo lo ves tú, como administrador.')}
           </div>
         )}
       </div>

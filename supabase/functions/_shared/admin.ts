@@ -51,7 +51,11 @@ export async function requireAdmin(req: Request) {
   const { data, error } = await supabase.rpc("soy_admin");
   if (error) return { error: json({ error: "No se pudieron comprobar los permisos" }, 500) };
   if (data !== true) return { error: json({ error: "Solo los administradores pueden hacer esto" }, 403) };
-  return { supabase };
+
+  // Id de quien llama (para impedir, por ejemplo, que un admin se borre a sí mismo).
+  const jwt = authHeader.replace(/^Bearer\s+/i, "");
+  const { data: userData } = await supabase.auth.getUser(jwt);
+  return { supabase, userId: userData?.user?.id ?? null };
 }
 
 export function bunnyConfig() {

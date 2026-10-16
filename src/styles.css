@@ -181,3 +181,32 @@ a { color: inherit; text-decoration: none; }
 .progress { height: 14px; background: #dbe4f2; border-radius: 999px; overflow: hidden; }
 .progress-bar { height: 100%; background: var(--blue); transition: width 0.2s linear; }
 .notice { color: #0f6b3a; font-weight: 700; }
+
+/* ---------- Estados e importación ---------- */
+.tag {
+  display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere;
+}
+.row-card .tag, .preview-row .tag { margin-top: 0; }
+.row-main .tag { margin-top: 6px; }
+.tag-wait { background: #fff1e8; color: #b33d00; }
+.tag-error { background: #fdeceb; color: #b3261e; }
+.tag-new { background: #e6f4ea; color: #0f6b3a; }
+.tag-update { background: #e8f0fb; color: #08408a; }
+.tag-same { background: #eef3fa; color: #3f5578; }
+
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.preview { max-height: 320px; overflow: auto; border: 2px solid var(--line); border-radius: 12px; background: #fff; }
+.preview-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.preview-row:last-child { border-bottom: 0; }
+.fail-list { margin: 8px 0 0; padding-left: 20px; color: var(--error); font-size: 14px; }
+
+.kata-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+
+.tag-delete { background: #b3261e; color: #fff; }
+
+.icon-btn-danger { color: var(--error); border-color: #e8b8b4; flex-shrink: 0; }
+.icon-btn:disabled { opacity: 0.55; cursor: default; }

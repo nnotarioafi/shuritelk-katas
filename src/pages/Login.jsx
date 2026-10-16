@@ -65,7 +65,7 @@ export default function Login() {
         <form onSubmit={sendCode} className="stack">
           <div className="stack-sm">
             <h1>Entra con tu correo</h1>
-            <p className="muted">Te enviaremos un código de 6 dígitos para entrar.</p>
+            <p className="muted">Te enviaremos un código por correo para entrar.</p>
           </div>
 
           <label className="field">
@@ -96,7 +96,7 @@ export default function Login() {
           </div>
 
           <label className="field">
-            <span>Código de 6 dígitos</span>
+            <span>Código</span>
             <input
               className="code-input"
               inputMode="numeric"
